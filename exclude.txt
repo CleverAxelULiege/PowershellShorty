@@ -1,0 +1,10 @@
+##### DO NOT TOUCH THOSE PATHES EXCEPT IF YOU WANT TO EXPLODE, YOU FOOL (╯°□°）╯︵ ┻━┻ #####
+C:\Program Files (x86)
+C:\Program Files
+C:\ProgramData
+C:\Windows
+C:\Users\{{user}}\AppData
+.dll
+##### You can add your custom exclude past this point now \^o^/ #####
+
+node_modules
