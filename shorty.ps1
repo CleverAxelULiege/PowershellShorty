@@ -12,7 +12,7 @@ function GetReconstructedPath {
     param (
         [array] $treeStructure
     )  
-    return ("\\?\D:\" + ($treeStructure -join [IO.Path]::DirectorySeparatorChar))     
+    return ($actionPath + ($treeStructure -join [IO.Path]::DirectorySeparatorChar))     
 }
 
 
@@ -78,7 +78,7 @@ function ScanDisk {
                 $extension = $_.Extension
             }
                 
-            $treeStructure = ($path | Select-String -Pattern ([regex]::Escape("\\?\D:\") + "(.*)")).Matches.Groups[1].Value -split "\\"
+            $treeStructure = ($path | Select-String -Pattern ([regex]::Escape($actionPath) + "(.*)")).Matches.Groups[1].Value -split "\\"
             $newTreeStructure = $treeStructure.Clone()
             $testTreeStructure = New-Object System.Collections.Generic.List[System.String]
             $i = 0;
