@@ -1,8 +1,22 @@
 
 # exit
 $username = [Environment]::UserName
-$failSafeMinLengthValue = 75
 $possibleAnswersConfirmation = @("Y", "N")
+$maxLengthAbsolutePath = 256
+$actionPath = ""
+$pathRename = ""
+$newName = ""
+$prefixLitteralPath = "\\?\"
+
+function GetReconstructedPath {
+    param (
+        [array] $treeStructure
+    )  
+    return ("\\?\D:\" + ($treeStructure -join [IO.Path]::DirectorySeparatorChar))     
+}
+
+
+
 function ScanDisk {
     Write-Host "You choose to scan a a whole disk." -ForegroundColor Blue
     $fileSystemSelected = ""
@@ -18,26 +32,28 @@ function ScanDisk {
         $fileSystemSelected = (Read-Host).ToUpper()
     }
 
-    $fileSystemPath = $fileSystemsAvailables | ForEach-Object {
+    $actionPath = $fileSystemsAvailables | ForEach-Object {
         if ($_.Name.ToUpper() -eq $fileSystemSelected) {
             $_.Root
         }
     }
 
     $excludes = (Get-Content .\exclude.txt | ForEach-Object {
-        if($_.Trim() -ne "" -and $_[0] -ne "#"){
-            [regex]::Escape($_.replace("{{user}}", $username).replace("/", [IO.Path]::DirectorySeparatorChar).Trim())
-        }
+            if ($_.Trim() -ne "" -and $_[0] -ne "#") {
+                [regex]::Escape($_.replace("{{user}}", $username).replace("/", [IO.Path]::DirectorySeparatorChar).Trim())
+            }
         }) -join "|"
 
     Clear-Host
     Write-Host "We will use this path as the start of the scan : " -NoNewline -ForegroundColor Blue
-    Write-Host '"'$fileSystemPath'"' -ForegroundColor Yellow
+    Write-Host '"'$actionPath'"' -ForegroundColor Yellow
     Write-Host ""
     Write-Host "We will also exclude those pathes provided by the exclude.txt file :" -ForegroundColor Blue
 
+    $actionPath = $prefixLitteralPath + $actionPath
+
     Get-Content .\exclude.txt | ForEach-Object {
-        if($_.Trim() -ne "" -and $_[0] -ne "#"){
+        if ($_.Trim() -ne "" -and $_[0] -ne "#") {
             Write-Host $_.replace("{{user}}", $username) -ForegroundColor Cyan
         }
     }
@@ -46,78 +62,56 @@ function ScanDisk {
     Write-Host "If you'd like to provide more pathes or chunk of pathes to ignore, stop the script with CTRL + C and edit the exclude.txt file." -ForegroundColor Blue
     Read-Host "Press enter to continue"
 
-
-    Clear-Host
-    $confirmLength = 0
-    $maxLengthName = 0;
-    while ($confirmLength -eq 0) {
-        Write-Host "What max name length should we target (extension excluded) ? Please provide a positive integer :" -ForegroundColor Blue
-        $maxLengthName = Read-Host
-
-        if ($maxLengthName -match '^[0-9]+$') {
-
-            if ([int32]$maxLengthName -lt $failSafeMinLengthValue) {
-                Write-Host "The minimum length that you can give must be at least at $failSafeMinLengthValue, this is a fail safe. Edit the script to change this value." -ForegroundColor Red
-            }
-            else {
-                $answerConfirmLength = ""
-                while ($answerConfirmLength -notin $possibleAnswersConfirmation) {                
-                    Write-Host "Should we target files/directories that exceed"$maxLengthName" character(s) (extension excluded) ?" -NoNewline -ForegroundColor Blue
-                    Write-Host " (Y/N)" -ForegroundColor Yellow
-                    $answerConfirmLength = (Read-Host).ToUpper()
-                }
-    
-                if ($answerConfirmLength -eq "Y") {
-                    $confirmLength = 1;
-                }
-            }
-        }
-    }
-
-    $maxLengthName = [int32]$maxLengthName
-
-    Get-ChildItem -Path $fileSystemPath | Where-Object {
+    Get-ChildItem -LiteralPath $actionPath | Where-Object {
         $_.FullName -notmatch $excludes
     } | ForEach-Object {
-        if($_.PSIsContainer){
-            Write-Host "Scanning" $_.FullName -ForegroundColor Green
-            Get-ChildItem -Path $_.FullName -Recurse -ErrorAction SilentlyContinue | Where-Object {
-                $_.FullName -notmatch $excludes
-            } | ForEach-Object {
-                if($_.BaseName.length -gt $maxLengthName){
-                    $newName = [guid]::NewGuid().ToString()
-                    $index = $_.FullName.LastIndexOf([IO.Path]::DirectorySeparatorChar)
-                    $path = $_.FullName.Substring(0, $index+1)
-                    
-                    if(-not($_.PSIsContainer)){
-                        $newName += $_.Extension
-                    } 
-                    @($_.FullName, ($path + $newName)) | ConvertTo-Json -Compress | Out-File -FilePath $outputFile -Append
-                    Rename-Item -Path $_.FullName -NewName $newName
-    
-                    Write-Host "Changed " -NoNewline
-                    Write-Host $_.FullName -ForegroundColor Yellow -NoNewline
-                    Write-Host " to " -NoNewline
-                    Write-Host ($path + $newName) -ForegroundColor Yellow
-                }
+        Get-ChildItem -Path $_.FullName -Recurse | Where-Object { $_.FullName.Length -gt $maxLengthAbsolutePath } | ForEach-Object {
+            if ($pathRename -ne "") {
+                # Rename-Item -LiteralPath $pathRename -NewName $newName
+                $pathRename = ""
             }
-        } else {
-            if($_.BaseName.length -gt $maxLengthName){
-                $newName = [guid]::NewGuid().ToString()
-                $index = $_.FullName.LastIndexOf([IO.Path]::DirectorySeparatorChar)
-                $path = $_.FullName.Substring(0, $index+1)
+        
+        
+            $path = $_.FullName
+            $extension = "";
+            if (-not($_.PSIsContainer)) {
+                $extension = $_.Extension
+            }
                 
-                if(-not($_.PSIsContainer)){
-                    $newName += $_.Extension
-                } 
-                @($_.FullName, ($path + $newName)) | ConvertTo-Json -Compress | Out-File -FilePath $outputFile -Append
-                Rename-Item -Path $_.FullName -NewName $newName
-
-                Write-Host "Changed " -NoNewline
-                Write-Host $_.FullName -ForegroundColor Yellow -NoNewline
-                Write-Host " to " -NoNewline
-                Write-Host ($path + $newName) -ForegroundColor Yellow
+            $treeStructure = ($path | Select-String -Pattern ([regex]::Escape("\\?\D:\") + "(.*)")).Matches.Groups[1].Value -split "\\"
+            $newTreeStructure = $treeStructure.Clone()
+            $testTreeStructure = New-Object System.Collections.Generic.List[System.String]
+            $i = 0;
+                
+            while ($i -lt $treeStructure.Length -and (GetReconstructedPath -treeStructure $newTreeStructure).Length -gt $maxLengthAbsolutePath) {
+                $newDirFileName = 0;
+                $testTreeStructure.Add($newDirFileName.ToString())
+                    
+                if ($i -eq $treeStructure.Length - 1) {
+                    $testTreeStructure[$i] = $testTreeStructure[$i] + $extension
+                }
+                    
+                while (Test-Path -LiteralPath (GetReconstructedPath -treeStructure $testTreeStructure)) {
+                    $newDirFileName++;
+                    if ($i -eq $treeStructure.Length - 1) {
+                        $testTreeStructure[$i] = $testTreeStructure[$i] + $extension
+                    }
+                    else {
+                        $testTreeStructure[$i] = $newDirFileName.ToString()
+                    }
+                }
+                    
+                $pathRename = (GetReconstructedPath -treeStructure ($treeStructure[0..($testTreeStructure.Count - 1)]))
+                $newName = $testTreeStructure[$i]
+                $newTreeStructure[$i] = $testTreeStructure[$i]
+                @($pathRename, ($pathRename.Substring(0, $pathRename.LastIndexOf([IO.Path]::DirectorySeparatorChar)+1) + $newName)) | ConvertTo-Json -Compress | Out-File -FilePath $outputFile -Append
+                $i++;
             }
+        }
+
+        if ($pathRename -ne "") {
+            # Rename-Item -LiteralPath $pathRename -NewName $newName
+            $pathRename = ""
         }
     }
 }
@@ -128,11 +122,6 @@ function ScanPath {
 
 
 Clear-Host
-# [guid]::NewGuid().ToString()
-# $formatDate = "+%Y%m%d_%H%M%S"
-# $outputFile = (Get-Date -Date (Get-Date) -UFormat $formatDate) + ".txt";
-# @("test", "truc") | ConvertTo-Json -Compress | Out-File -FilePath $outputFile
-# exit;
 if (-not(Test-Path -Path .\exclude.txt)) {
     Write-Host "No exclude.txt file found in the same directory as the shorty script please provide one, exiting script..." -ForegroundColor Red
     Read-Host "Press enter to continue"
@@ -159,12 +148,15 @@ while ($answerScan -notin $possibleAnswersScan) {
 }
 
 Clear-Host
+if (-not(Test-Path -Path .\shortystoric)) {
+    $null = New-Item -Path ".\shortystoric" -ItemType Directory
+    Write-Host "Created shortystoric directory" -ForegroundColor Blue
+}
 
-$formatDate = "+%Y%m%d_%H%M%S"
-$outputFile = ".\shorty_historic\" + (Get-Date -Date (Get-Date) -UFormat $formatDate) + ".txt";
+$formatDate = "+%Y%m%d%H%M%S"
+$outputFile = ".\shortystoric\" + (Get-Date -Date (Get-Date) -UFormat $formatDate) + ".txt";
 Out-File -FilePath $outputFile
-
-Write-Host "Created historic of modified files as"$outputFile -ForegroundColor Green
+Write-Host "Created shortystoric file as"$outputFile -ForegroundColor Blue
 
 switch ($answerScan) {
     "disk" { ScanDisk }
