@@ -7,14 +7,15 @@ Clear-Host
 
 # exit;
 
-$historics = Get-ChildItem -Path .\shorty_historic | Sort-Object -Property BaseName;
-$formatDate = "+%Y%m%d_%H%M%S"
-$outputFile = ".\shorty_historic\unshorty" + (Get-Date -Date (Get-Date) -UFormat $formatDate) + ".txt";
+$historics = Get-ChildItem -Path .\shortystoric | Sort-Object -Property BaseName;
+$formatDate = "+%Y%m%d%H%M%S"
+$outputFile = ".\shortystoric\unshorty" + (Get-Date -Date (Get-Date) -UFormat $formatDate) + ".txt";
 Out-File -FilePath $outputFile
 
 foreach ($historic in $historics) {
-    [System.Collections.ArrayList]$changedFiles = Get-Content -Path $historic.FullName
-    
+
+    [System.Collections.ArrayList]$changedFiles = [array](Get-Content -Path $historic.FullName)
+    # exit;
     $saveIndex = 0;
     $i = 0;
     $countSeparatorSave = 0;
@@ -47,4 +48,8 @@ Get-Content -Path $outputFile | ForEach-Object {
     }
 }
 
-Remove-Item -Path $outputFile
+# Remove-Item -Path $outputFile
+Get-ChildItem -Path .\shortystoric | ForEach-Object {
+    Remove-Item -Path $_.FullName
+}
+Write-Host "Successfull rollback to the previous long absolute pathes."
