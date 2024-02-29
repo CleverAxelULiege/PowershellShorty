@@ -1,7 +1,6 @@
 
 # Rename-Item -Path "D:\rename\subdir\bonjour.txt" -NewName "D:\rename\subdir\hello.txt" -WhatIf
 
-# exit
 $username = [Environment]::UserName
 # $possibleAnswersConfirmation = @("Y", "N")
 $maxLengthAbsolutePath = 256
@@ -118,50 +117,81 @@ function RenameAbsolutePathTooLong {
         }
 
         $copyPathes = $absolutePathesTooLong.ToArray()
+        # $copyPathes
         # $copyPath[0] = "test"
         # DoesPathTooLongExist -pathes $copyPathes
         # while(DoesPathTooLongExist -pathes $copyPathes){
 
         # }
         $newDirFileName = 0;
+        $indexCurrentPath = 0;
+        $dirFileNamesCreated = New-Object System.Collections.Generic.List[System.Int32]
         foreach ($path in $copyPathes) {
+
+            
             # $path
-            $item = Get-Item -LiteralPath $path
+            $item = Get-Item -LiteralPath $absolutePathesTooLong[$indexCurrentPath]
             
             $extension = "";
             if (-not($item.PSIsContainer)) {
                 $extension = $item.Extension
-                # $item
             }
 
-
-
-            
             $treeStructure = ($path | Select-String -Pattern ("^" + [regex]::Escape($actionPath) + "(.*)")).Matches.Groups[1].Value -split "\\"
+
+            if($extension -ne ""){
+                $lastElement = $treeStructure.Length-1
+                $treeStructure[$lastElement] = $treeStructure[$lastElement].Replace($extension, "")
+            }
+
             $newTreeStructure = $treeStructure.Clone()
             $testTreeStructure = New-Object System.Collections.Generic.List[System.String]
             $index = 0;
             while ($index -lt $treeStructure.Length -and (GetReconstructedPath -treeStructure $newTreeStructure).Length -gt $maxLengthAbsolutePath) {
-                if($treeStructure[$index] -match ("^[\d\.]+(" + [regex]::Escape($extension) + ")?$")){
+
+                if($treeStructure[$index] -match ("^[\d\.]+(" + [regex]::Escape($extension) + ")?$") -and ([Int32]$treeStructure[$index] -in $dirFileNamesCreated)){
                     $testTreeStructure.Add($treeStructure[$index])
-                    $newDirFileName++;
+
+                    if ($index -eq $treeStructure.Length - 1) {
+                        $testTreeStructure[$index] = $testTreeStructure[$index] + $extension
+                    }
+
+                    # $newDirFileName++;
                     $index++
                     continue
                 }
-                # Write-Host "in"
                 
                 $testTreeStructure.Add($newDirFileName.ToString())
-                while ($testTreeStructure[$index] -eq $item.BaseName) {
+
+                $pathTotest = (GetReconstructedPath -treeStructure $testTreeStructure)
+                if ($index -eq $treeStructure.Length - 1) {
+                    $pathTotest = $pathTotest + $extension
+                }
+
+                while (Test-Path -LiteralPath $pathTotest) {
+                    Write-Host "IN FRICKING LOOP" -ForegroundColor DarkMagenta
                     $newDirFileName++;
                     $testTreeStructure[$index] = $newDirFileName.ToString()
+
+                    $pathTotest = (GetReconstructedPath -treeStructure $testTreeStructure)
+                    if ($index -eq $treeStructure.Length - 1) {
+                        $pathTotest = $pathTotest + $extension
+                    }
                 }
+
+                # while ($testTreeStructure[$index] -eq $treeStructure[$index]) {
+                #     Write-Host "IN FRICKING LOOP" -ForegroundColor DarkMagenta
+                #     $newDirFileName++;
+                #     $testTreeStructure[$index] = $newDirFileName.ToString()
+                # }
+
+                $dirFileNamesCreated.Add([Int32]$testTreeStructure[$index])
                 
                 if ($index -eq $treeStructure.Length - 1) {
                     $testTreeStructure[$index] = $testTreeStructure[$index] + $extension
                 }
                 
                 $newTreeStructure[$index] = $testTreeStructure[$index]
-                # $newTreeStructure
                 $replace = (GetReconstructedPath -treeStructure ($treeStructure[0..$index]))
                 $replacement = (GetReconstructedPath -treeStructure $testTreeStructure)
                 
@@ -171,15 +201,13 @@ function RenameAbsolutePathTooLong {
                 }
                 Write-Host "-------------------------" -ForegroundColor Green
                 $copyPathes
-                $newDirFileName++;
+                # $newDirFileName++;
                 $index++
-                # $newDirFileName
-                # $replace
-                # $replacement
             }
             Write-Host "------------"
             
             # break
+            $indexCurrentPath++;
         }
         
         Write-Host "------------" -ForegroundColor Red
@@ -218,7 +246,8 @@ function ScanPath {
     Write-Host "You choose to scan a specific path" -ForegroundColor Blue
     $actionPath = "unknown"
     $actionPath = "D:\longgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"
-    while (-not(Test-Path -Path $actionPath)) {
+    # $actionPath = "D:\longgggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg\longggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg\oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+    while (-not(Test-Path -LiteralPath $actionPath)) {
         Write-Host "Please enter an absolute path to start from :" -ForegroundColor Blue
         $actionPath = Read-Host
 
